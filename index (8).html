@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BMU Community Library - Digital Attendance</title>
+  <!-- Tailwind CSS & FontAwesome Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- QR Code Generator & Scanner -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
+
+  <!-- ================= HEADER ================= -->
+  <header class="bg-indigo-900 text-white px-4 sm:px-6 py-4 shadow-xl flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <div class="bg-white/10 p-2 sm:p-2.5 rounded-2xl border border-white/20">
+        <i class="fa-solid fa-book-open-reader text-xl sm:text-2xl text-amber-300"></i>
+      </div>
+      <div>
+        <h1 class="text-lg sm:text-2xl font-black tracking-wide">BMU COMMUNITY LIBRARY</h1>
+        <p class="text-[10px] sm:text-xs text-indigo-200">Self Attendance & Library Kiosk</p>
+      </div>
+    </div>
+    
+    <div class="flex items-center gap-2 sm:gap-3">
+      <!-- Live Clock -->
+      <div class="hidden md:flex flex-col text-right pr-3 border-r border-indigo-700">
+        <span id="liveClock" class="text-sm font-mono font-bold text-amber-300">--:--:--</span>
+        <span id="liveDate" class="text-[10px] text-indigo-200">-- --- ----</span>
+      </div>
+
+      <button onclick="openScanner()" class="bg-amber-400 hover:bg-amber-500 text-indigo-950 text-xs font-bold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl flex items-center gap-1.5 shadow active:scale-95 transition">
+        <i class="fa-solid fa-qrcode"></i>
+        <span class="hidden sm:inline">Scan Card</span>
+      </button>
+
+      <button onclick="openAdminModal()" class="bg-indigo-950 hover:bg-black text-white text-xs font-semibold px-3 sm:px-4 py-2 sm:py-2.5 rounded-xl border border-indigo-500 flex items-center gap-1.5 active:scale-95 transition">
+        <i class="fa-solid fa-lock"></i>
+        <span>Admin</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= MAIN ATTENDANCE CARD ================= -->
+  <main class="flex-1 flex items-center justify-center p-4">
+    <div class="bg-white p-6 sm:p-8 rounded-3xl shadow-2xl w-full max-w-lg border border-slate-200 text-center relative overflow-hidden">
+      
+      <div class="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-amber-400"></div>
+
+      <!-- Student Profile -->
+      <div class="flex flex-col items-center mb-5">
+        <img id="studentPhoto" src="https://cdn-icons-png.flaticon.com/512/3135/3135715.png" alt="Student Photo" 
+             class="w-28 h-28 sm:w-32 sm:h-32 rounded-full border-4 border-indigo-600 shadow-md object-cover bg-slate-50 transition-all duration-300 mb-3">
+        <h2 id="studentName" class="text-xl sm:text-2xl font-bold text-gray-800">Roll Number दर्ज करें</h2>
+        <p id="studentDetails" class="text-xs text-gray-500">BMU Library Member</p>
+      </div>
+
+      <!-- Roll Input -->
+      <div class="mb-3 relative">
+        <input type="text" id="rollInput" oninput="findStudent()" placeholder="उदा. BMJU/CL/26/01" 
+               class="w-full text-center text-base sm:text-lg font-bold border-2 border-indigo-200 rounded-2xl p-3 sm:p-3.5 focus:outline-none focus:border-indigo-600 uppercase tracking-wider transition">
+        <div id="loader" class="hidden absolute right-4 top-4 text-indigo-600">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+        </div>
+      </div>
+
+      <!-- Device Remember Checkbox -->
+      <div class="flex items-center justify-center gap-2 mb-4 text-xs text-gray-500">
+        <input type="checkbox" id="rememberMe" onchange="toggleRemember(this)" class="rounded text-indigo-600 focus:ring-0 cursor-pointer">
+        <label for="rememberMe" class="cursor-pointer">मेरे फोन में मेरा Roll No याद रखें</label>
+      </div>
+
+      <!-- PIN Security Field -->
+      <div id="pinSection" class="hidden mb-5 bg-amber-50 border border-amber-200 p-3 sm:p-3.5 rounded-2xl">
+        <label class="block text-xs font-bold text-amber-900 mb-1">🔒 4-अंकों का गुप्त PIN दर्ज करें:</label>
+        <input type="password" id="studentPinInput" maxlength="4" placeholder="••••" 
+               class="w-32 sm:w-36 text-center text-xl font-bold border-2 border-amber-300 rounded-xl p-2 tracking-widest focus:outline-amber-600">
+      </div>
+
+      <!-- IN / OUT Buttons -->
+      <div class="grid grid-cols-2 gap-3 sm:gap-4">
+        <button onclick="verifyAndMark('IN')" id="inBtn" disabled 
+                class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-3 sm:py-3.5 px-4 rounded-2xl shadow-lg shadow-emerald-600/30 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none transition flex items-center justify-center gap-2 active:scale-95 text-sm sm:text-base">
+          <i class="fa-solid fa-arrow-right-to-bracket text-base sm:text-lg"></i>
+          <span>🟢 IN (आगमन)</span>
+        </button>
+
+        <button onclick="verifyAndMark('OUT')" id="outBtn" disabled 
+                class="bg-rose-600 hover:bg-rose-700 text-white font-bold py-3 sm:py-3.5 px-4 rounded-2xl shadow-lg shadow-rose-600/30 disabled:bg-gray-200 disabled:text-gray-400 disabled:shadow-none transition flex items-center justify-center gap-2 active:scale-95 text-sm sm:text-base">
+          <i class="fa-solid fa-arrow-right-from-bracket text-base sm:text-lg"></i>
+          <span>🔴 OUT (प्रस्थान)</span>
+        </button>
+      </div>
+
+      <div id="statusAlert" class="mt-4 p-3 rounded-xl text-sm font-medium hidden"></div>
+
+      <div class="mt-6 pt-4 border-t border-gray-100 flex justify-between items-center text-xs text-gray-400">
+        <span>BMU Library (Capacity: 30)</span>
+        <button onclick="loadStudents(true)" class="hover:text-indigo-600 flex items-center gap-1 font-semibold">
+          <i class="fa-solid fa-arrows-rotate"></i> Sync Data
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ================= QR SCANNER MODAL ================= -->
+  <div id="scannerModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl p-6 w-full max-w-sm text-center shadow-2xl">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-gray-800 flex items-center gap-2">
+          <i class="fa-solid fa-camera text-indigo-600"></i> कार्ड स्कैन करें
+        </h3>
+        <button onclick="closeScanner()" class="text-gray-500 hover:text-black text-xl">✖</button>
+      </div>
+      <div id="qr-reader" class="w-full rounded-2xl overflow-hidden border"></div>
+      <p class="text-xs text-gray-500 mt-3">कैमरे के सामने छात्र का QR कार्ड लाएं</p>
+    </div>
+  </div>
+
+  <!-- ================= ADMIN MODAL ================= -->
+  <div id="adminModal" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl w-full max-w-lg p-6 shadow-2xl max-h-[90vh] flex flex-col border border-gray-100">
+      
+      <div class="flex justify-between items-center pb-3 border-b border-gray-200">
+        <h3 class="font-bold text-gray-800 text-lg flex items-center gap-2">
+          <i class="fa-solid fa-user-shield text-indigo-600"></i> Admin Panel
+        </h3>
+        <button onclick="closeAdminModal()" class="text-gray-400 hover:text-black">✖</button>
+      </div>
+
+      <!-- Password Section -->
+      <div id="authSection" class="py-6 space-y-4">
+        <p class="text-xs text-gray-600">सुरक्षित एडमिन पासवर्ड दर्ज करें:</p>
+        <input type="password" id="adminPassInput" placeholder="Password दर्ज करें" 
+               class="w-full border-2 border-gray-200 p-3 rounded-xl text-sm focus:outline-indigo-600">
+        <button onclick="verifyAdminSecure()" id="loginBtn" class="w-full bg-indigo-700 hover:bg-indigo-800 text-white py-3 rounded-xl font-bold text-sm transition">
+          लॉगिन करें
+        </button>
+      </div>
+
+      <!-- Admin Panel Controls -->
+      <div id="adminPanelBody" class="hidden flex-1 overflow-y-auto space-y-4 pt-3">
+        
+        <div class="flex bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+          <button onclick="showTab('add')" id="tabAdd" class="flex-1 py-2 rounded-lg bg-white shadow text-indigo-700">नया छात्र जोड़ें</button>
+          <button onclick="showTab('list')" id="tabList" class="flex-1 py-2 rounded-lg text-gray-600">सभी छात्र (<span id="count">0</span>)</button>
+          <button onclick="showTab('wallQr')" id="tabWallQr" class="flex-1 py-2 rounded-lg text-gray-600">दीवार का QR</button>
+        </div>
+
+        <!-- Tab 1: Add Student -->
+        <form id="addStudentForm" onsubmit="submitStudent(event)" class="space-y-3 text-left">
+          <div>
+            <label class="text-xs font-semibold text-gray-600">Roll Number *</label>
+            <input type="text" id="newRoll" placeholder="BMJU/CL/26/02" required class="w-full border p-2.5 rounded-xl text-sm uppercase">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-600">पूरा नाम (Full Name) *</label>
+            <input type="text" id="newName" placeholder="नाम" required class="w-full border p-2.5 rounded-xl text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-600">मोबाइल नंबर *</label>
+            <input type="tel" id="newMobile" placeholder="मोबाइल" required class="w-full border p-2.5 rounded-xl text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-600">पता (Address) *</label>
+            <input type="text" id="newAddress" placeholder="पता" required class="w-full border p-2.5 rounded-xl text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-600">सुरक्षा PIN (4 अंक) *</label>
+            <input type="password" id="newPin" maxlength="4" placeholder="उदा. 1234" required class="w-full border p-2.5 rounded-xl text-sm font-mono">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-600">फोटो URL (वैकल्पिक)</label>
+            <input type="url" id="newPhoto" placeholder="https://..." class="w-full border p-2.5 rounded-xl text-sm">
+          </div>
+
+          <button type="submit" id="saveBtn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-3 rounded-xl font-bold text-sm shadow">
+            Google Sheet में सेव करें (अलग Sheet बनेगी)
+          </button>
+        </form>
+
+        <!-- Tab 2: Students List -->
+        <div id="studentsListView" class="hidden space-y-2 max-h-72 overflow-y-auto pr-1"></div>
+
+        <!-- Tab 3: Wall QR Code for Library Gate -->
+        <div id="wallQrView" class="hidden text-center p-4 bg-slate-50 border rounded-2xl">
+          <h4 class="font-bold text-gray-800 text-sm mb-1">🏛️ लाइब्रेरी दीवार QR कोड</h4>
+          <p class="text-xs text-gray-500 mb-3">इसे प्रिंट करके गेट पर चिपकाएं। छात्र अपने फोन से इसे स्कैन करके हाजिरी लगाएंगे।</p>
+          <div id="wallQrCode" class="flex justify-center p-3 bg-white border rounded-2xl mb-3"></div>
+          <button onclick="window.print()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-bold">प्रिंट करें</button>
+        </div>
+
+      </div>
+
+    </div>
+  </div>
+
+  <!-- QR Card Modal for Student -->
+  <div id="printModal" class="fixed inset-0 bg-black/80 hidden flex items-center justify-center p-4 z-50">
+    <div class="bg-white rounded-3xl p-6 text-center max-w-xs w-full shadow-2xl">
+      <h3 id="qrStudentName" class="font-bold text-gray-800 text-lg"></h3>
+      <p id="qrStudentRoll" class="text-xs text-gray-500 font-mono mb-4"></p>
+      <div id="qrcode" class="flex justify-center p-3 bg-white border rounded-2xl mb-4"></div>
+      <button onclick="window.print()" class="w-full bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-bold mb-2">कार्ड प्रिंट करें</button>
+      <button onclick="document.getElementById('printModal').classList.add('hidden')" class="w-full bg-gray-200 text-gray-700 py-2 rounded-xl text-sm">बंद करें</button>
+    </div>
+  </div>
+
+  <!-- ================= JAVASCRIPT ================= -->
+  <script>
+    // ✅ आपका नया लिंक यहाँ जुड़ा हुआ है:
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzZ4Qo22cw4iGy1RE2r_oVcYDCDkC6rrCWx10fCL9mLLT4BzRzwtSHoFEioUqhtgPuC/exec";
+    const FALLBACK_PASS = "Chitti@2000";
+    const DEFAULT_AVATAR = "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
+
+    let studentsList = [];
+    let activeStudent = null;
+    let html5QrcodeScanner = null;
+
+    // Digital Clock
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('liveClock').innerText = now.toLocaleTimeString('en-US');
+      document.getElementById('liveDate').innerText = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    }, 1000);
+
+    // Google Sheets से डेटा लोड करना
+    async function loadStudents(showNotification = false) {
+      document.getElementById('loader').classList.remove('hidden');
+      try {
+        const res = await fetch(SCRIPT_URL);
+        studentsList = await res.json();
+        document.getElementById('count').innerText = studentsList.length;
+        renderList();
+
+        // छात्र के फोन में सेव रोल नंबर चेक करना
+        const savedRoll = localStorage.getItem('bmu_student_roll');
+        if (savedRoll) {
+          document.getElementById('rollInput').value = savedRoll;
+          document.getElementById('rememberMe').checked = true;
+          findStudent();
+        }
+
+        if (showNotification) showAlert("डेटा सिंक हो गया!", "bg-emerald-100 text-emerald-800");
+      } catch (err) {
+        console.error(err);
+      } finally {
+        document.getElementById('loader').classList.add('hidden');
+      }
+    }
+    loadStudents();
+
+    function toggleRemember(cb) {
+      const roll = document.getElementById('rollInput').value.trim();
+      if (cb.checked && roll) {
+        localStorage.setItem('bmu_student_roll', roll);
+      } else {
+        localStorage.removeItem('bmu_student_roll');
+      }
+    }
+
+    // Roll Number ढूँढना
+    function findStudent() {
+      const input = document.getElementById('rollInput').value.trim().toUpperCase();
+      activeStudent = studentsList.find(s => String(s.rollNo || '').trim().toUpperCase() === input);
+
+      const inBtn = document.getElementById('inBtn');
+      const outBtn = document.getElementById('outBtn');
+      const pinSec = document.getElementById('pinSection');
+
+      if (activeStudent) {
+        document.getElementById('studentName').innerText = activeStudent.name.trim();
+        document.getElementById('studentDetails').innerText = `📞 ${activeStudent.mobile} | 📍 ${activeStudent.address ? activeStudent.address.trim() : ''}`;
+        document.getElementById('studentPhoto').src = (activeStudent.photo && activeStudent.photo.trim() !== "") ? activeStudent.photo : DEFAULT_AVATAR;
+        
+        if (activeStudent.pin && String(activeStudent.pin).trim() !== "") {
+          pinSec.classList.remove('hidden');
+        } else {
+          pinSec.classList.add('hidden');
+        }
+
+        if (document.getElementById('rememberMe').checked) {
+          localStorage.setItem('bmu_student_roll', activeStudent.rollNo);
+        }
+
+        inBtn.disabled = false;
+        outBtn.disabled = false;
+      } else {
+        document.getElementById('studentName').innerText = "Roll Number दर्ज करें";
+        document.getElementById('studentDetails').innerText = "BMU Library Member";
+        document.getElementById('studentPhoto').src = DEFAULT_AVATAR;
+        pinSec.classList.add('hidden');
+        inBtn.disabled = true;
+        outBtn.disabled = true;
+      }
+    }
+
+    // PIN चेक और हाजिरी लगाना
+    function verifyAndMark(type) {
+      if (!activeStudent) return;
+      const enteredPin = document.getElementById('studentPinInput').value.trim();
+
+      if (activeStudent.pin && String(activeStudent.pin).trim() !== "") {
+        if (String(activeStudent.pin).trim() !== String(enteredPin)) {
+          alert("❌ गलत PIN! केवल असली छात्र ही हाजिरी लगा सकता है।");
+          return;
+        }
+      }
+
+      markAttendance(type);
+    }
+
+    async function markAttendance(type) {
+      const inBtn = document.getElementById('inBtn');
+      const outBtn = document.getElementById('outBtn');
+      inBtn.disabled = true;
+      outBtn.disabled = true;
+
+      showAlert(`⏳ ${activeStudent.name.trim()} की ${type} हाजिरी दर्ज हो रही है...`, "bg-indigo-100 text-indigo-800");
+
+      try {
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({
+            action: "attendance",
+            rollNo: activeStudent.rollNo,
+            name: activeStudent.name,
+            status: type
+          })
+        });
+
+        showAlert(`✅ ${activeStudent.name.trim()} की हाजिरी [${type}] उनकी व्यक्तिगत शीट में दर्ज हो गई!`, "bg-emerald-100 text-emerald-800");
+        document.getElementById('studentPinInput').value = "";
+        setTimeout(() => {
+          if (!document.getElementById('rememberMe').checked) {
+            document.getElementById('rollInput').value = "";
+            findStudent();
+          }
+        }, 3000);
+      } catch (err) {
+        showAlert("डेटा सेव नहीं हुआ।", "bg-rose-100 text-rose-800");
+        inBtn.disabled = false;
+        outBtn.disabled = false;
+      }
+    }
+
+    // QR Code Scanner
+    function openScanner() {
+      document.getElementById('scannerModal').classList.remove('hidden');
+      html5QrcodeScanner = new Html5Qrcode("qr-reader");
+      html5QrcodeScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        (decodedText) => {
+          document.getElementById('rollInput').value = decodedText;
+          findStudent();
+          closeScanner();
+        }
+      ).catch(err => console.error(err));
+    }
+
+    function closeScanner() {
+      if (html5QrcodeScanner) {
+        html5QrcodeScanner.stop().then(() => html5QrcodeScanner.clear());
+      }
+      document.getElementById('scannerModal').classList.add('hidden');
+    }
+
+    // Admin Panel Login
+    function openAdminModal() { document.getElementById('adminModal').classList.remove('hidden'); }
+    function closeAdminModal() { document.getElementById('adminModal').classList.add('hidden'); }
+
+    async function verifyAdminSecure() {
+      const pass = document.getElementById('adminPassInput').value;
+      const btn = document.getElementById('loginBtn');
+      btn.innerText = "जांच हो रही है...";
+      btn.disabled = true;
+
+      try {
+        let isAuthorized = false;
+        try {
+          const res = await fetch(SCRIPT_URL, {
+            method: "POST",
+            headers: { "Content-Type": "text/plain;charset=utf-8" },
+            body: JSON.stringify({ action: "verifyAdmin", password: pass })
+          });
+          const data = await res.json();
+          if (data.authorized) isAuthorized = true;
+        } catch(e) {}
+
+        if (isAuthorized || pass === FALLBACK_PASS) {
+          document.getElementById('authSection').classList.add('hidden');
+          document.getElementById('adminPanelBody').classList.remove('hidden');
+          generateWallQR();
+        } else {
+          alert("गलत पासवर्ड!");
+        }
+      } finally {
+        btn.innerText = "लॉगिन करें";
+        btn.disabled = false;
+      }
+    }
+
+    function showTab(t) {
+      const tabs = ['addStudentForm', 'studentsListView', 'wallQrView'];
+      const btns = ['tabAdd', 'tabList', 'tabWallQr'];
+      
+      tabs.forEach(tabId => document.getElementById(tabId).classList.add('hidden'));
+      btns.forEach(btnId => document.getElementById(btnId).className = "flex-1 py-2 rounded-lg text-gray-600");
+
+      if (t === 'add') {
+        document.getElementById('addStudentForm').classList.remove('hidden');
+        document.getElementById('tabAdd').className = "flex-1 py-2 rounded-lg bg-white shadow text-indigo-700";
+      } else if (t === 'list') {
+        document.getElementById('studentsListView').classList.remove('hidden');
+        document.getElementById('tabList').className = "flex-1 py-2 rounded-lg bg-white shadow text-indigo-700";
+      } else if (t === 'wallQr') {
+        document.getElementById('wallQrView').classList.remove('hidden');
+        document.getElementById('tabWallQr').className = "flex-1 py-2 rounded-lg bg-white shadow text-indigo-700";
+      }
+    }
+
+    function renderList() {
+      const container = document.getElementById('studentsListView');
+      if (studentsList.length === 0) {
+        container.innerHTML = `<p class="text-xs text-gray-400 text-center py-4">कोई छात्र दर्ज नहीं है।</p>`;
+        return;
+      }
+      container.innerHTML = studentsList.map(s => `
+        <div class="flex items-center justify-between p-2.5 bg-slate-50 border rounded-xl">
+          <div class="flex items-center gap-2">
+            <img src="${(s.photo && s.photo.trim() !== '') ? s.photo : DEFAULT_AVATAR}" class="w-8 h-8 rounded-full object-cover border">
+            <div>
+              <h4 class="font-bold text-xs text-gray-800">${s.name}</h4>
+              <p class="text-[10px] text-gray-500 font-mono">${s.rollNo}</p>
+            </div>
+          </div>
+          <button onclick="generateQR('${s.rollNo}', '${s.name}')" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs px-2.5 py-1.5 rounded-lg font-bold flex items-center gap-1">
+            <i class="fa-solid fa-qrcode"></i> Card
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function generateQR(roll, name) {
+      document.getElementById('qrStudentName').innerText = name;
+      document.getElementById('qrStudentRoll').innerText = roll;
+      const qrBox = document.getElementById('qrcode');
+      qrBox.innerHTML = "";
+      new QRCode(qrBox, { text: roll, width: 150, height: 150 });
+      document.getElementById('printModal').classList.remove('hidden');
+    }
+
+    function generateWallQR() {
+      const wallBox = document.getElementById('wallQrCode');
+      wallBox.innerHTML = "";
+      new QRCode(wallBox, { text: window.location.href, width: 180, height: 180 });
+    }
+
+    async function submitStudent(e) {
+      e.preventDefault();
+      const btn = document.getElementById('saveBtn');
+      btn.innerText = "Sheet बनाई जा रही है...";
+      btn.disabled = true;
+
+      const payload = {
+        action: "addStudent",
+        rollNo: document.getElementById('newRoll').value.trim(),
+        name: document.getElementById('newName').value.trim(),
+        mobile: document.getElementById('newMobile').value.trim(),
+        address: document.getElementById('newAddress').value.trim(),
+        pin: document.getElementById('newPin').value.trim(),
+        photo: document.getElementById('newPhoto').value.trim()
+      };
+
+      try {
+        await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+        alert("✅ छात्र जुड़ गया और उसकी अलग Sheet भी बन गई!");
+        document.getElementById('addStudentForm').reset();
+        await loadStudents();
+        showTab('list');
+      } catch (err) {
+        alert("त्रुटि हुई!");
+      } finally {
+        btn.innerText = "Google Sheet में सेव करें (अलग Sheet बनेगी)";
+        btn.disabled = false;
+      }
+    }
+
+    function showAlert(msg, cls) {
+      const el = document.getElementById('statusAlert');
+      el.className = `mt-4 p-3 rounded-xl text-sm font-medium ${cls}`;
+      el.innerText = msg;
+      el.classList.remove('hidden');
+    }
+  </script>
+</body>
+</html>
